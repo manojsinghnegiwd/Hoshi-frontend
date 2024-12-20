@@ -1,9 +1,4 @@
-export interface Workspace {
-  id: number;
-  name: string;
-  description?: string;
-  createdAt: Date;
-}
+import { Workspace } from '@/types/workspace';
 
 export interface CreateWorkspaceDto {
   name: string;

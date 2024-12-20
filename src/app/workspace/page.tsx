@@ -11,9 +11,10 @@ import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Workspace, workspaceService } from "@/lib/services/workspace";
+import { workspaceService } from "@/lib/services/workspace";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { Workspace } from "@/types";
 
 const createWorkspaceSchema = z.object({
   name: z.string().min(1, "Name is required"),

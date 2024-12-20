@@ -1,158 +1,212 @@
 'use client';
 
+import { useEffect, useState, useRef } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { io, Socket } from "socket.io-client";
+import { Thread } from "@/types/thread";
+import { Message } from "@/types/message";
+import { useToast } from "@/hooks/use-toast";
+import { threadService } from "@/lib/services/thread";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, MessageSquare } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { ChatMessage } from "@/components/chat-message";
-import { useEffect, useState } from "react";
-import { io, Socket } from "socket.io-client";
-import { useParams } from "next/navigation";
+import { MessageSquare, Plus } from "lucide-react";
 import Link from "next/link";
+import type { ClientToServerEvents, ServerToClientEvents, ThreadStatus } from "@/types/socket";
 
-interface Chat {
-  id: number;
-  name: string;
-  messages: ThreadMessage[];
-}
-
-interface ThreadMessage {
-  id: number;
+interface StreamingMessage {
+  messageId: number;
   threadId: number;
-  role: 'user' | 'assistant' | 'system';
   content: string;
-  createdAt: Date;
-}
-
-interface ThreadStatus {
-  threadId: number;
-  status: 'typing' | 'idle';
+  done: boolean;
 }
 
 export default function ChatPage() {
   const params = useParams();
+  const router = useRouter();
+  const { toast } = useToast();
   const workspaceId = Number(params.workspaceId);
   const agentId = Number(params.agentId);
-  const threadId = params.threadId === 'new' ? null : Number(params.threadId);
-
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [chats, setChats] = useState<Chat[]>([]);
-  const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const threadId = Number(params.threadId);
+  
+  const [socket, setSocket] = useState<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<ThreadStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [streamingMessages, setStreamingMessages] = useState<Record<number, StreamingMessage>>({});
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
-    const socketInstance = io('http://localhost:3001');
-    
-    socketInstance.on('thread:message', (message: ThreadMessage) => {
-      setChats(prevChats => {
-        return prevChats.map(chat => {
-          if (chat.id === message.threadId) {
-            return {
-              ...chat,
-              messages: [...chat.messages, message]
-            };
-          }
-          return chat;
-        });
+    scrollToBottom();
+  }, [messages, streamingMessages]);
+
+  useEffect(() => {
+    const socketInstance = io(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000');
+    setSocket(socketInstance);
+
+    socketInstance.on('thread:message', (message) => {
+      setMessages(prev => {
+        if (prev.some(m => m.id === message.id)) return prev;
+        console.log(message, ';message');
+        return [...prev, message];
       });
     });
 
-    socketInstance.on('thread:status', (status: ThreadStatus) => {
+    socketInstance.on('thread:message:stream', (data) => {
+      setStreamingMessages(prev => ({
+        ...prev,
+        [data.messageId]: {
+          messageId: data.messageId,
+          threadId: data.threadId,
+          content: prev[data.messageId]?.content 
+            ? prev[data.messageId].content + data.chunk 
+            : data.chunk,
+          done: data.done,
+        }
+      }));
+    });
+
+    socketInstance.on('thread:message:complete', (messageId) => {
+      setStreamingMessages(prev => {
+        const { [messageId]: completed, ...rest } = prev;
+        return rest;
+      });
+    });
+
+    socketInstance.on('thread:status', (status) => {
       setStatus(status);
     });
 
-    socketInstance.on('error', (error: string) => {
+    socketInstance.on('error', (error) => {
       console.error('Socket error:', error);
-      // You might want to show this in the UI
+      toast({
+        title: "Error",
+        description: error,
+        variant: "destructive",
+      });
     });
-
-    setSocket(socketInstance);
-
-    // If threadId is 'new', create a new thread
-    if (!threadId && socket) {
-      createNewChat();
-    }
 
     return () => {
       socketInstance.disconnect();
     };
-  }, []);
+  }, [toast]);
 
-  const createNewChat = () => {
-    if (!socket) return;
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [threadData, threadsData] = await Promise.all([
+          threadService.getById(threadId),
+          threadService.getAgentThreads(agentId)
+        ]);
+        
+        setMessages(threadData.messages);
+        setThreads(threadsData);
 
-    socket.emit('thread:create', {
-      agentId,
-      name: `New Chat ${chats.length + 1}`,
-    }, (response) => {
-      if (response.success && response.thread) {
-        setChats(prev => [...prev, response.thread]);
-        setActiveChat(response.thread);
-        socket.emit('thread:join', response.thread.id);
+        if (socket) {
+          socket.emit('thread:join', threadId);
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load chat data",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
       }
-    });
-  };
+    };
 
-  const handleChatSelect = (chat: Chat) => {
-    if (!socket) return;
-    
-    if (activeChat) {
-      socket.emit('thread:leave', activeChat.id);
+    if (socket) {
+      loadData();
     }
-    
-    setActiveChat(chat);
-    socket.emit('thread:join', chat.id);
-  };
 
-  const handleSubmit = (e: React.FormEvent) => {
+    return () => {
+      if (socket) {
+        socket.emit('thread:leave', threadId);
+      }
+    };
+  }, [threadId, agentId, socket, toast]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!socket || !activeChat || !message.trim()) return;
+    if (!socket || !message.trim()) return;
 
     socket.emit('thread:message:send', {
-      threadId: activeChat.id,
+      threadId,
       content: message,
     }, (response) => {
-      if (response.success) {
+      if (response.success && response.message) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === response.message!.id);
+          if (exists) return prev;
+          return [...prev, response.message!];
+        });
         setMessage("");
+      } else if (response.error) {
+        toast({
+          title: "Error",
+          description: response.error,
+          variant: "destructive",
+        });
       }
     });
   };
 
-  return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className="w-80 border-r bg-muted/50">
-        <div className="p-4">
-          <Button 
-            className="w-full justify-start gap-2"
-            onClick={createNewChat}
-          >
-            <PlusCircle size={20} />
-            New Chat
-          </Button>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-muted-foreground">Loading chat...</p>
         </div>
-        <ScrollArea className="h-[calc(100vh-5rem)]">
-          <div className="flex flex-col gap-2 p-4">
-            {chats.map((chat) => (
-              <Link 
-                href={`/workspace/${workspaceId}/agent/${agentId}/thread/${chat.id}`}
-                key={chat.id}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen bg-background">
+      {/* Sidebar */}
+      <div className="w-80 border-r flex flex-col">
+        <div className="p-4 border-b">
+          <Link 
+            href={`/workspace/${workspaceId}/agent/${agentId}/thread`}
+            className="w-full"
+          >
+            <Button className="w-full" variant="outline">
+              <Plus className="mr-2 h-4 w-4" />
+              New Thread
+            </Button>
+          </Link>
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-2">
+            {threads.map((thread) => (
+              <Link
+                key={thread.id}
+                href={`/workspace/${workspaceId}/agent/${agentId}/thread/${thread.id}`}
               >
-                <Button
-                  variant={activeChat?.id === chat.id ? "default" : "ghost"}
-                  className="w-full justify-start gap-2 h-auto py-3"
+                <div
+                  className={cn(
+                    "p-3 rounded-lg hover:bg-muted flex items-center space-x-3 cursor-pointer",
+                    thread.id === threadId && "bg-muted"
+                  )}
                 >
-                  <MessageSquare size={16} />
-                  <div className="flex flex-col items-start text-sm">
-                    <span className="font-medium">{chat.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {chat.messages.length > 0 
-                        ? new Date(chat.messages[chat.messages.length - 1].createdAt).toLocaleDateString()
-                        : 'No messages'}
-                    </span>
+                  <MessageSquare className="h-5 w-5" />
+                  <div className="flex-1 truncate">
+                    <p className="text-sm font-medium">{thread.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(thread.createdAt).toLocaleDateString()}
+                    </p>
                   </div>
-                </Button>
+                </div>
               </Link>
             ))}
           </div>
@@ -161,43 +215,57 @@ export default function ChatPage() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
+        {/* Messages */}
         <ScrollArea className="flex-1 p-4">
-          <div className="max-w-3xl mx-auto">
-            {activeChat?.messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                content={message.content}
-                isUser={message.role === 'user'}
-                timestamp={new Date(message.createdAt)}
-              />
-            ))}
-            {status?.status === 'typing' && status.threadId === activeChat?.id && (
-              <div className="text-sm text-muted-foreground italic">
-                AI is typing...
+          <div className="space-y-4">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn(
+                  "flex w-full",
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                )}
+              >
+                <div
+                  className={cn(
+                    "rounded-lg px-4 py-2 max-w-[80%]",
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted"
+                  )}
+                >
+                  <p className="text-sm">{msg.content}</p>
+                </div>
               </div>
-            )}
+            ))}
+            {/* Render streaming messages */}
+            {Object.values(streamingMessages).map((msg) => (
+              <div
+                key={msg.messageId}
+                className="flex w-full justify-start"
+              >
+                <div className="bg-muted rounded-lg px-4 py-2 max-w-[80%]">
+                  <p className="text-sm">{msg.content}</p>
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
-        
-        {/* Message Input */}
-        <div className="p-4 border-t">
-          <div className="max-w-3xl mx-auto">
-            <form className="flex gap-4" onSubmit={handleSubmit}>
-              <textarea
-                rows={1}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type your message..."
-                className="flex-1 resize-none border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <Button 
-                type="submit" 
-                disabled={!activeChat || !message.trim() || status?.status === 'typing'}
-              >
-                Send
-              </Button>
-            </form>
-          </div>
+
+        {/* Input Area */}
+        <div className="border-t p-4">
+          <form onSubmit={handleSubmit} className="flex space-x-2">
+            <Input
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="flex-1"
+            />
+            <Button type="submit" disabled={!message.trim()}>
+              Send
+            </Button>
+          </form>
         </div>
       </div>
     </div>
