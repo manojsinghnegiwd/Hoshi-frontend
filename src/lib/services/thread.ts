@@ -3,23 +3,18 @@ import { Message } from '@/types/message';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-export interface CreateThreadDto {
-  name: string;
-  initialMessage: string;
-}
-
 export interface SendMessageDto {
   content: string;
 }
 
 export const threadService = {
-  async createForAgent(agentId: number, data: CreateThreadDto): Promise<Thread> {
+  async createForAgent(agentId: number): Promise<Thread> {
     const response = await fetch(`${API_URL}/thread/agent/${agentId}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ agentId }),
     });
 
     if (!response.ok) {

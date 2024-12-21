@@ -1,6 +1,9 @@
 export interface ServerToClientEvents {
   'thread:message': (message: ThreadMessage) => void;
+  'thread:message:stream': (data: StreamChunk) => void;
+  'thread:message:complete': (messageId: number) => void;
   'thread:status': (status: ThreadStatus) => void;
+  'thread:update': (data: { id: number; name: string }) => void;
   'error': (error: string) => void;
 }
 
@@ -19,6 +22,13 @@ export interface ThreadMessage {
   createdAt: Date;
 }
 
+export interface StreamChunk {
+  messageId: number;
+  threadId: number;
+  chunk: string;
+  done: boolean;
+}
+
 export interface ThreadStatus {
   threadId: number;
   status: 'typing' | 'idle';
@@ -26,8 +36,6 @@ export interface ThreadStatus {
 
 export interface CreateThreadData {
   agentId: number;
-  name?: string;
-  initialMessage?: string;
 }
 
 export interface ThreadResponse {

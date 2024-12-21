@@ -26,10 +26,7 @@ export default function ThreadPage() {
           router.replace(`/workspace/${workspaceId}/agent/${agentId}/thread/${latestThread.id}`);
         } else {
           // If no threads exist, create a new one
-          const newThread = await threadService.createForAgent(agentId, {
-            name: 'New Thread',
-            initialMessage: 'Hello! How can I help you today?'
-          });
+          const newThread = await threadService.createForAgent(agentId);
           
           router.replace(`/workspace/${workspaceId}/agent/${agentId}/thread/${newThread.id}`);
         }

@@ -4,16 +4,15 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { Thread } from "@/types/thread";
-import { Message } from "@/types/message";
 import { useToast } from "@/hooks/use-toast";
 import { threadService } from "@/lib/services/thread";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Plus } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Loader2 } from "lucide-react";
 import Link from "next/link";
-import type { ClientToServerEvents, ServerToClientEvents, ThreadStatus } from "@/types/socket";
+import type { ClientToServerEvents, ServerToClientEvents, ThreadStatus, ThreadMessage, StreamChunk } from "@/types/socket";
 
 interface StreamingMessage {
   messageId: number;
@@ -32,12 +31,13 @@ export default function ChatPage() {
   
   const [socket, setSocket] = useState<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const [threads, setThreads] = useState<Thread[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<ThreadStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessages, setStreamingMessages] = useState<Record<number, StreamingMessage>>({});
+  const [deletingThreads, setDeletingThreads] = useState<Set<number>>(new Set());
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -54,12 +54,11 @@ export default function ChatPage() {
     socketInstance.on('thread:message', (message) => {
       setMessages(prev => {
         if (prev.some(m => m.id === message.id)) return prev;
-        console.log(message, ';message');
         return [...prev, message];
       });
     });
 
-    socketInstance.on('thread:message:stream', (data) => {
+    socketInstance.on('thread:message:stream', (data: StreamChunk) => {
       setStreamingMessages(prev => ({
         ...prev,
         [data.messageId]: {
@@ -82,6 +81,16 @@ export default function ChatPage() {
 
     socketInstance.on('thread:status', (status) => {
       setStatus(status);
+    });
+
+    socketInstance.on('thread:update', (data) => {
+      setThreads(prev => 
+        prev.map(thread => 
+          thread.id === data.id 
+            ? { ...thread, name: data.name }
+            : thread
+        )
+      );
     });
 
     socketInstance.on('error', (error) => {
@@ -107,7 +116,7 @@ export default function ChatPage() {
           threadService.getAgentThreads(agentId)
         ]);
         
-        setMessages(threadData.messages);
+        setMessages(threadData.messages as ThreadMessage[]);
         setThreads(threadsData);
 
         if (socket) {
@@ -161,6 +170,56 @@ export default function ChatPage() {
     });
   };
 
+  const handleNewThread = async () => {
+    try {
+      const thread = await threadService.createForAgent(agentId);
+      router.push(`/workspace/${workspaceId}/agent/${agentId}/thread/${thread.id}`);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create new thread",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteThread = async (threadId: number, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+    if (deletingThreads.has(threadId)) return;
+
+    try {
+      setDeletingThreads(prev => {
+        const newSet = new Set(prev);
+        newSet.add(threadId);
+        return newSet;
+      });
+      await threadService.delete(threadId);
+      setThreads(prev => prev.filter(t => t.id !== threadId));
+      
+      // If we're deleting the current thread, redirect to the latest thread or the thread creation page
+      if (Number(params.threadId) === threadId) {
+        const remainingThreads = threads.filter(t => t.id !== threadId);
+        if (remainingThreads.length > 0) {
+          router.replace(`/workspace/${workspaceId}/agent/${agentId}/thread/${remainingThreads[0].id}`);
+        } else {
+          router.replace(`/workspace/${workspaceId}/agent/${agentId}/thread`);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete thread",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingThreads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(threadId);
+        return newSet;
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -176,15 +235,14 @@ export default function ChatPage() {
       {/* Sidebar */}
       <div className="w-80 border-r flex flex-col">
         <div className="p-4 border-b">
-          <Link 
-            href={`/workspace/${workspaceId}/agent/${agentId}/thread`}
-            className="w-full"
+          <Button 
+            className="w-full" 
+            variant="outline"
+            onClick={handleNewThread}
           >
-            <Button className="w-full" variant="outline">
-              <Plus className="mr-2 h-4 w-4" />
-              New Thread
-            </Button>
-          </Link>
+            <Plus className="mr-2 h-4 w-4" />
+            New Thread
+          </Button>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-2">
@@ -195,7 +253,7 @@ export default function ChatPage() {
               >
                 <div
                   className={cn(
-                    "p-3 rounded-lg hover:bg-muted flex items-center space-x-3 cursor-pointer",
+                    "p-3 rounded-lg hover:bg-muted flex items-center space-x-3 cursor-pointer group",
                     thread.id === threadId && "bg-muted"
                   )}
                 >
@@ -206,6 +264,19 @@ export default function ChatPage() {
                       {new Date(thread.createdAt).toLocaleDateString()}
                     </p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                    onClick={(e) => handleDeleteThread(thread.id, e)}
+                    disabled={deletingThreads.has(thread.id)}
+                  >
+                    {deletingThreads.has(thread.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                    )}
+                  </Button>
                 </div>
               </Link>
             ))}
@@ -261,8 +332,9 @@ export default function ChatPage() {
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-1"
+              disabled={status?.status === 'typing'}
             />
-            <Button type="submit" disabled={!message.trim()}>
+            <Button type="submit" disabled={!message.trim() || status?.status === 'typing'}>
               Send
             </Button>
           </form>
