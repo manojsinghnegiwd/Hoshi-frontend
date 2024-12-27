@@ -10,15 +10,52 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { MessageSquare, Plus, Trash2, Loader2 } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Loader2, Wrench } from "lucide-react";
 import Link from "next/link";
-import type { ClientToServerEvents, ServerToClientEvents, ThreadStatus, ThreadMessage, StreamChunk } from "@/types/socket";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { ClientToServerEvents, ServerToClientEvents, ThreadStatus, ThreadMessage, StreamChunk, ToolExecution } from "@/types/socket";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 interface StreamingMessage {
   messageId: number;
   threadId: number;
   content: string;
   done: boolean;
+}
+
+type ToolExecutionsMap = Record<number, ToolExecution[]>;
+
+function MessageToolExecution({ messageId, toolExecutions }: { messageId: number, toolExecutions: ToolExecutionsMap }) {
+  const messageTools = toolExecutions[messageId] || [];
+  if (messageTools.length === 0) return null;
+
+  return (
+    <Accordion type="single" collapsible defaultValue="tool" className="mb-2">
+      <AccordionItem value="tool" className="border-0">
+        <AccordionTrigger className="py-1 hover:no-underline">
+          <div className="flex items-center text-xs text-muted-foreground">
+            <Wrench className="h-3 w-3 mr-1" />
+            <span>View tool executions ({messageTools.length})</span>
+          </div>
+        </AccordionTrigger>
+        <AccordionContent>
+          <div className="space-y-2">
+            {messageTools.map((tool, index) => (
+              <div key={index} className="text-xs text-muted-foreground pl-4 border-l-2 border-muted">
+                {tool.explanation}
+              </div>
+            ))}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
 }
 
 export default function ChatPage() {
@@ -38,6 +75,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [streamingMessages, setStreamingMessages] = useState<Record<number, StreamingMessage>>({});
   const [deletingThreads, setDeletingThreads] = useState<Set<number>>(new Set());
+  const [toolExecutions, setToolExecutions] = useState<ToolExecutionsMap>({});
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,10 +111,30 @@ export default function ChatPage() {
     });
 
     socketInstance.on('thread:message:complete', (messageId) => {
+      const completedMessage = streamingMessages[messageId];
+      if (completedMessage) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === messageId)) return prev;
+          return [...prev, {
+            id: messageId,
+            threadId: completedMessage.threadId,
+            role: 'assistant',
+            content: completedMessage.content,
+            createdAt: new Date(),
+          }];
+        });
+      }
       setStreamingMessages(prev => {
         const { [messageId]: completed, ...rest } = prev;
         return rest;
       });
+    });
+
+    socketInstance.on('thread:tool:start', (data) => {
+      setToolExecutions(prev => ({
+        ...prev,
+        [data.messageId]: [...(prev[data.messageId] || []), data]
+      }));
     });
 
     socketInstance.on('thread:status', (status) => {
@@ -305,7 +363,15 @@ export default function ChatPage() {
                       : "bg-muted"
                   )}
                 >
-                  <p className="text-sm">{msg.content}</p>
+                  <MessageToolExecution messageId={msg.id} toolExecutions={toolExecutions} />
+                  <div className={cn(
+                    "text-sm prose dark:prose-invert max-w-none prose-sm",
+                    msg.role === "user" && "prose-p:text-primary-foreground prose-headings:text-primary-foreground prose-strong:text-primary-foreground prose-code:text-primary-foreground prose-ul:text-primary-foreground prose-ol:text-primary-foreground"
+                  )}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             ))}
@@ -316,7 +382,12 @@ export default function ChatPage() {
                 className="flex w-full justify-start"
               >
                 <div className="bg-muted rounded-lg px-4 py-2 max-w-[80%]">
-                  <p className="text-sm">{msg.content}</p>
+                  <MessageToolExecution messageId={msg.messageId} toolExecutions={toolExecutions} />
+                  <div className="text-sm prose dark:prose-invert max-w-none prose-sm">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
             ))}

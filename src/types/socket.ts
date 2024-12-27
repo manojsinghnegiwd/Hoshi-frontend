@@ -1,9 +1,13 @@
+import { Server as SocketIOServer } from 'socket.io';
+import { Server as HTTPServer } from 'http';
+
 export interface ServerToClientEvents {
   'thread:message': (message: ThreadMessage) => void;
   'thread:message:stream': (data: StreamChunk) => void;
   'thread:message:complete': (messageId: number) => void;
   'thread:status': (status: ThreadStatus) => void;
   'thread:update': (data: { id: number; name: string }) => void;
+  'thread:tool:start': (data: ToolExecution) => void;
   'error': (error: string) => void;
 }
 
@@ -27,6 +31,12 @@ export interface StreamChunk {
   threadId: number;
   chunk: string;
   done: boolean;
+}
+
+export interface ToolExecution {
+  messageId: number;
+  threadId: number;
+  explanation: string;
 }
 
 export interface ThreadStatus {
@@ -57,4 +67,15 @@ export interface MessageResponse {
   success: boolean;
   message?: ThreadMessage;
   error?: string;
-} 
+}
+
+export interface SocketData {
+  activeThreads: Set<number>;
+}
+
+export type SocketServer = SocketIOServer<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  {},
+  SocketData
+>; 
