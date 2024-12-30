@@ -7,7 +7,7 @@ import { Thread } from "@/types/thread";
 import { useToast } from "@/hooks/use-toast";
 import { threadService } from "@/lib/services/thread";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AutoExpandingTextarea } from "@/components/ui/auto-expanding-textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { MessageSquare, Plus, Trash2, Loader2, Wrench } from "lucide-react";
@@ -398,12 +398,18 @@ export default function ChatPage() {
         {/* Input Area */}
         <div className="border-t p-4">
           <form onSubmit={handleSubmit} className="flex space-x-2">
-            <Input
+            <AutoExpandingTextarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type your message..."
               className="flex-1"
               disabled={status?.status === 'typing'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
+              }}
             />
             <Button type="submit" disabled={!message.trim() || status?.status === 'typing'}>
               Send
