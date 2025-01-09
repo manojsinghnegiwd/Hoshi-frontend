@@ -291,7 +291,7 @@ export default function ChatPage() {
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
-      <div className="w-80 border-r flex flex-col">
+      <div className="w-80 border-r flex flex-col min-w-[320px] max-w-[320px]">
         <div className="p-4 border-b">
           <Button 
             className="w-full" 
@@ -302,8 +302,8 @@ export default function ChatPage() {
             New Thread
           </Button>
         </div>
-        <ScrollArea className="flex-1">
-          <div className="p-2 space-y-2">
+        <ScrollArea className="flex-1 max-w-full">
+          <div className="p-2 space-y-2 min-w-[320px] max-w-[320px]">
             {threads.map((thread) => (
               <Link
                 key={thread.id}
@@ -311,21 +311,21 @@ export default function ChatPage() {
               >
                 <div
                   className={cn(
-                    "p-3 rounded-lg hover:bg-muted flex items-center space-x-3 cursor-pointer group",
+                    "p-3 rounded-lg hover:bg-muted flex items-center space-x-3 cursor-pointer group max-w-full",
                     thread.id === threadId && "bg-muted"
                   )}
                 >
-                  <MessageSquare className="h-5 w-5" />
+                  <MessageSquare className="h-5 w-5 flex-shrink-0" />
                   <div className="flex-1 truncate">
-                    <p className="text-sm font-medium">{thread.name}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm font-medium truncate">{thread.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
                       {new Date(thread.createdAt).toLocaleDateString()}
                     </p>
                   </div>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="opacity-0 group-hover:opacity-100 h-8 w-8"
+                    className="opacity-0 group-hover:opacity-100 h-8 w-8 flex-shrink-0"
                     onClick={(e) => handleDeleteThread(thread.id, e)}
                     disabled={deletingThreads.has(thread.id)}
                   >
