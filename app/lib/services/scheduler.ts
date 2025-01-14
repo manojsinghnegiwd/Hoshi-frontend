@@ -1,14 +1,23 @@
-import type { Schedule } from '@/types/schedule';
+import { Schedule } from '@/types/schedule';
 
-export interface ScheduleLog {
+export interface ScheduleRun {
   id: number;
   scheduleId: number;
-  status: string;
-  error?: string;
+  threadId: number | null;
+  status: 'running' | 'success' | 'failed';
+  startTime: string;
+  endTime?: string;
   metadata?: any;
-  startTime: Date;
-  endTime?: Date;
-  createdAt: Date;
+  thread?: {
+    id: number;
+    name: string;
+    messages: Array<{
+      id: number;
+      role: string;
+      content: string;
+      createdAt: string;
+    }>;
+  };
 }
 
 export interface CreateScheduleDto {
@@ -18,16 +27,14 @@ export interface CreateScheduleDto {
   cronExpression?: string;
   timezone?: string;
   fixedTime?: string;
-  metadata: {
-    input: string;
-  };
+  metadata?: any;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+class SchedulerService {
+  private baseUrl = 'http://localhost:3000/scheduler';
 
-export const schedulerService = {
   async create(data: CreateScheduleDto): Promise<Schedule> {
-    const response = await fetch(`${API_URL}/scheduler`, {
+    const response = await fetch(this.baseUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,65 +47,60 @@ export const schedulerService = {
     }
 
     return response.json();
-  },
+  }
 
   async getAll(): Promise<Schedule[]> {
-    const response = await fetch(`${API_URL}/scheduler`);
-
+    const response = await fetch(this.baseUrl);
     if (!response.ok) {
       throw new Error('Failed to fetch schedules');
     }
-
     return response.json();
-  },
+  }
 
   async getById(id: number): Promise<Schedule> {
-    const response = await fetch(`${API_URL}/scheduler/${id}`);
-
+    const response = await fetch(`${this.baseUrl}/${id}`);
     if (!response.ok) {
       throw new Error('Failed to fetch schedule');
     }
-
     return response.json();
-  },
+  }
 
-  async pause(id: number): Promise<void> {
-    const response = await fetch(`${API_URL}/scheduler/${id}/pause`, {
+  async pause(id: number): Promise<Schedule> {
+    const response = await fetch(`${this.baseUrl}/${id}/pause`, {
       method: 'POST',
     });
-
     if (!response.ok) {
       throw new Error('Failed to pause schedule');
     }
-  },
+    return response.json();
+  }
 
-  async resume(id: number): Promise<void> {
-    const response = await fetch(`${API_URL}/scheduler/${id}/resume`, {
+  async resume(id: number): Promise<Schedule> {
+    const response = await fetch(`${this.baseUrl}/${id}/resume`, {
       method: 'POST',
     });
-
     if (!response.ok) {
       throw new Error('Failed to resume schedule');
     }
-  },
+    return response.json();
+  }
 
   async delete(id: number): Promise<void> {
-    const response = await fetch(`${API_URL}/scheduler/${id}`, {
+    const response = await fetch(`${this.baseUrl}/${id}`, {
       method: 'DELETE',
     });
-
     if (!response.ok) {
       throw new Error('Failed to delete schedule');
     }
-  },
+  }
 
-  async getLogs(id: number): Promise<ScheduleLog[]> {
-    const response = await fetch(`${API_URL}/scheduler/${id}/logs`);
-
+  async getRuns(id: number): Promise<ScheduleRun[]> {
+    const response = await fetch(`${this.baseUrl}/${id}/runs`);
     if (!response.ok) {
-      throw new Error('Failed to fetch schedule logs');
+      throw new Error('Failed to fetch schedule runs');
     }
-
     return response.json();
-  },
-}; 
+  }
+}
+
+export const schedulerService = new SchedulerService(); 
