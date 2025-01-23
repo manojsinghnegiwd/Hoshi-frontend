@@ -1,8 +1,10 @@
 import { Workspace } from '@/types/workspace';
+import { supabase } from '@/lib/supabase';
 
 export interface CreateWorkspaceDto {
   name: string;
   description?: string;
+  userId: string;
 }
 
 export interface UpdateWorkspaceDto {
@@ -12,13 +14,21 @@ export interface UpdateWorkspaceDto {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
+// Helper function to get auth token
+const getAuthHeaders = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${session?.access_token}`,
+  };
+};
+
 export const workspaceService = {
   async create(data: CreateWorkspaceDto): Promise<Workspace> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(data),
     });
 
@@ -30,7 +40,10 @@ export const workspaceService = {
   },
 
   async getAll(): Promise<Workspace[]> {
-    const response = await fetch(`${API_URL}/workspace`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/workspace`, {
+      headers,
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch workspaces');
@@ -40,7 +53,10 @@ export const workspaceService = {
   },
 
   async getById(id: number): Promise<Workspace> {
-    const response = await fetch(`${API_URL}/workspace/${id}`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/workspace/${id}`, {
+      headers,
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch workspace');
@@ -50,11 +66,10 @@ export const workspaceService = {
   },
 
   async update(id: number, data: UpdateWorkspaceDto): Promise<Workspace> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(data),
     });
 
@@ -66,8 +81,10 @@ export const workspaceService = {
   },
 
   async delete(id: number): Promise<void> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${id}`, {
       method: 'DELETE',
+      headers,
     });
 
     if (!response.ok) {
@@ -76,11 +93,10 @@ export const workspaceService = {
   },
 
   async addExtension(workspaceId: number, extensionId: number, config: Record<string, any> = {}, enabled: boolean = true) {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${workspaceId}/extension`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         extensionId,
         config,
@@ -96,8 +112,10 @@ export const workspaceService = {
   },
 
   async removeExtension(workspaceId: number, extensionId: number): Promise<void> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${workspaceId}/extension/${extensionId}`, {
       method: 'DELETE',
+      headers,
     });
 
     if (!response.ok) {
@@ -106,11 +124,10 @@ export const workspaceService = {
   },
 
   async addAgent(workspaceId: number, agentId: number, config: Record<string, any> = {}, useAllExtensions: boolean = true) {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${workspaceId}/agent`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         agentId,
         config,
@@ -126,8 +143,10 @@ export const workspaceService = {
   },
 
   async removeAgent(workspaceId: number, agentId: number): Promise<void> {
+    const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}/workspace/${workspaceId}/agent/${agentId}`, {
       method: 'DELETE',
+      headers,
     });
 
     if (!response.ok) {
@@ -136,7 +155,10 @@ export const workspaceService = {
   },
 
   async getExtensions(workspaceId: number) {
-    const response = await fetch(`${API_URL}/workspace/${workspaceId}/extension`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/workspace/${workspaceId}/extension`, {
+      headers,
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch extensions');
@@ -146,7 +168,10 @@ export const workspaceService = {
   },
 
   async getAgents(workspaceId: number) {
-    const response = await fetch(`${API_URL}/workspace/${workspaceId}/agent`);
+    const headers = await getAuthHeaders();
+    const response = await fetch(`${API_URL}/workspace/${workspaceId}/agent`, {
+      headers,
+    });
 
     if (!response.ok) {
       throw new Error('Failed to fetch agents');

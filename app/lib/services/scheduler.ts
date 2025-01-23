@@ -28,17 +28,23 @@ export interface CreateScheduleDto {
   timezone?: string;
   fixedTime?: string;
   metadata?: any;
+  userId: string;
 }
 
 class SchedulerService {
   private baseUrl = 'http://localhost:3000/scheduler';
 
+  private async getHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('supabase.auth.token')}`
+    };
+  }
+
   async create(data: CreateScheduleDto): Promise<Schedule> {
     const response = await fetch(this.baseUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: await this.getHeaders(),
       body: JSON.stringify(data),
     });
 
@@ -50,7 +56,9 @@ class SchedulerService {
   }
 
   async getAll(): Promise<Schedule[]> {
-    const response = await fetch(this.baseUrl);
+    const response = await fetch(this.baseUrl, {
+      headers: await this.getHeaders()
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch schedules');
     }
@@ -58,7 +66,9 @@ class SchedulerService {
   }
 
   async getById(id: number): Promise<Schedule> {
-    const response = await fetch(`${this.baseUrl}/${id}`);
+    const response = await fetch(`${this.baseUrl}/${id}`, {
+      headers: await this.getHeaders()
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch schedule');
     }
@@ -68,6 +78,7 @@ class SchedulerService {
   async pause(id: number): Promise<Schedule> {
     const response = await fetch(`${this.baseUrl}/${id}/pause`, {
       method: 'POST',
+      headers: await this.getHeaders()
     });
     if (!response.ok) {
       throw new Error('Failed to pause schedule');
@@ -78,6 +89,7 @@ class SchedulerService {
   async resume(id: number): Promise<Schedule> {
     const response = await fetch(`${this.baseUrl}/${id}/resume`, {
       method: 'POST',
+      headers: await this.getHeaders()
     });
     if (!response.ok) {
       throw new Error('Failed to resume schedule');
@@ -88,6 +100,7 @@ class SchedulerService {
   async delete(id: number): Promise<void> {
     const response = await fetch(`${this.baseUrl}/${id}`, {
       method: 'DELETE',
+      headers: await this.getHeaders()
     });
     if (!response.ok) {
       throw new Error('Failed to delete schedule');
@@ -95,7 +108,9 @@ class SchedulerService {
   }
 
   async getRuns(id: number): Promise<ScheduleRun[]> {
-    const response = await fetch(`${this.baseUrl}/${id}/runs`);
+    const response = await fetch(`${this.baseUrl}/${id}/runs`, {
+      headers: await this.getHeaders()
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch schedule runs');
     }

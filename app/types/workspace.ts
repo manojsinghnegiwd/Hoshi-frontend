@@ -5,6 +5,7 @@ export interface Workspace {
   id: number;
   name: string;
   description?: string | null;
+  userId: string;
   agents: WorkspaceAgent[];
   extensions: WorkspaceExtension[];
   createdAt: Date;

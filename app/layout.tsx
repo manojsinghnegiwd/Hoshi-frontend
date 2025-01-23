@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import { SidebarNav } from "@/components/sidebar-nav";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SupabaseProvider } from '@/providers/supabase-provider'
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,13 +19,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={cn(inter.className, "bg-background")}>
-        <SidebarProvider>
-          <SidebarNav />
-          <main className="flex-1 overflow-auto">
-            <SidebarTrigger />
-            {children}
-          </main>
-        </SidebarProvider>
+        <SupabaseProvider>
+          {children}
+        </SupabaseProvider>
       </body>
     </html>
   );

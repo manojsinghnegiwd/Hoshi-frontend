@@ -15,10 +15,12 @@ import { workspaceService } from "@/lib/services/workspace";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Workspace } from "@/types";
+import { useSupabase } from "@/providers/supabase-provider";
 
 const createWorkspaceSchema = z.object({
   name: z.string().min(1, "Name is required"),
   description: z.string().optional(),
+  userId: z.string(),
 });
 
 export default function WorkspacesPage() {
@@ -26,14 +28,22 @@ export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const { user } = useSupabase();
 
   const form = useForm<z.infer<typeof createWorkspaceSchema>>({
     resolver: zodResolver(createWorkspaceSchema),
     defaultValues: {
       name: "",
       description: "",
+      userId: user?.id || "",
     },
   });
+
+  useEffect(() => {
+    if (user?.id) {
+      form.setValue('userId', user.id);
+    }
+  }, [user, form]);
 
   useEffect(() => {
     loadWorkspaces();
@@ -85,7 +95,7 @@ export default function WorkspacesPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-[1200px] p-6">
+      <div className="mx-auto p-6">
         <div className="flex flex-col gap-6 mb-8 mt-4">
           <div className="flex justify-between items-center">
             <div>

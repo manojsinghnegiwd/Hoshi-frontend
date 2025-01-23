@@ -54,6 +54,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from 'next/link';
+import { useSupabase } from '@/providers/supabase-provider';
 
 const scheduleFormSchema = z.object({
   workspaceId: z.string(),
@@ -66,6 +67,7 @@ const scheduleFormSchema = z.object({
   metadata: z.object({
     input: z.string(),
   }),
+  userId: z.string(),
 });
 
 type ScheduleFormValues = z.infer<typeof scheduleFormSchema>;
@@ -80,6 +82,7 @@ export default function SchedulerPage() {
   const [isLoadingWorkspaces, setIsLoadingWorkspaces] = useState(true);
   const [isLoadingAgents, setIsLoadingAgents] = useState(false);
   const { toast } = useToast();
+  const { user } = useSupabase();
 
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -90,8 +93,15 @@ export default function SchedulerPage() {
       metadata: {
         input: '',
       },
+      userId: user?.id || '',
     },
   });
+
+  useEffect(() => {
+    if (user?.id) {
+      form.setValue('userId', user.id);
+    }
+  }, [user, form]);
 
   useEffect(() => {
     loadSchedules();
@@ -190,6 +200,7 @@ export default function SchedulerPage() {
       await schedulerService.create({
         ...scheduleData,
         agentId: parseInt(data.agentId),
+        userId: user?.id || '',
       });
       loadSchedules();
       setOpen(false);

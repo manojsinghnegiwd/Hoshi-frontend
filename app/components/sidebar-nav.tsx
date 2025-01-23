@@ -26,18 +26,18 @@ interface SidebarNavItem {
 const items: SidebarNavItem[] = [
   {
     title: "Workspaces",
-    href: "/workspace",
+    href: "/dashboard/workspace",
     icon: <Home className="h-4 w-4" />,
   },
   {
     title: "Extensions",
-    href: "/extensions",
+    href: "/dashboard/extensions",
     icon: <Puzzle className="h-4 w-4" />,
     exact: true,
   },
   {
     title: "Scheduler",
-    href: "/scheduler",
+    href: "/dashboard/scheduler",
     icon: <Calendar className="h-4 w-4" />,
   },
 ];
